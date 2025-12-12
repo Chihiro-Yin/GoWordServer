@@ -3,7 +3,7 @@ package models
 import "time"
 
 type Word struct {
-	ID        int       `json:"id"`
+	ID        uint      `json:"id"`
 	Img       string    `json:"img"`
 	Word      string    `json:"word"`
 	Phonetic  string    `json:"phonetic"`
