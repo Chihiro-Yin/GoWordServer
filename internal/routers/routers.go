@@ -27,8 +27,11 @@ func InitAllRouters() {
 			r.Use(middleware.JWTAuth) // 验证Token有效性
 			//修改生词接口
 			r.Route("/new-word", func(r chi.Router) {
-				r.Post("/", handler.AddNewWord)              // 添加生词
-				r.Delete("/{wordId}", handler.DeleteNewWord) // 删除生词
+				r.Get("/", handler.ListNewWords)                      //已登录用户查询生词接口
+				r.Post("/", handler.AddNewWord)                       // 添加生词
+				r.Put("/{wordId}/master", handler.MarkAsMastered)     // 标记为已掌握
+				r.Put("/{wordId}/unmaster", handler.MarkAsUnmastered) // 标记为未掌握
+				r.Delete("/{wordId}", handler.DeleteNewWord)          // 删除生词
 			})
 		})
 	})
