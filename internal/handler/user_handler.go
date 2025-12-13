@@ -16,8 +16,9 @@ import (
 func Register(w http.ResponseWriter, r *http.Request) {
 	// 1. 解析请求体
 	var req models.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		tool.JSONResponse(w, nil, http.StatusBadRequest)
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		tool.JSONResponse(w, map[string]string{"error": err.Error()}, http.StatusBadRequest)
 		return
 	}
 
@@ -76,7 +77,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	// 1. 解析并校验请求体
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		tool.JSONResponse(w, nil, http.StatusBadRequest)
+		tool.JSONResponse(w, map[string]string{"error": err.Error()}, http.StatusBadRequest)
 		return
 	}
 

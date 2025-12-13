@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"imxy.top/wordserver/internal/config"
@@ -11,7 +14,7 @@ import (
 
 func ListNewWords(w http.ResponseWriter, r *http.Request) {
 	page, pageSize := tool.ParsePageParams(r)
-	nick := chi.URLParam(r, "nick")
+	nick := r.URL.Query().Get("nick")
 	var newWords []models.UserNewWord
 	err := config.DB.Where("nick = ?", nick).Limit(pageSize).Offset((page - 1) * pageSize).Find(&newWords).Error
 	if err != nil {
@@ -73,4 +76,47 @@ func ListNewWords(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	tool.JSONResponse(w, respData)
+}
+func isDuplicateWordError(err error) bool {
+	// MySQL 1062错误码：唯一键冲突
+	return err != nil && err.Error() != "" && (err.Error() == "Error 1062: Duplicate entry '"+"' for key 'user_new_words.uk_user_word_id'" ||
+		strings.Contains(err.Error(), "Duplicate entry") && strings.Contains(err.Error(), "uk_user_word_id"))
+}
+func AddNewWord(w http.ResponseWriter, r *http.Request) {
+	var req models.AddNewWordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		tool.JSONResponse(w, nil, http.StatusBadRequest)
+		return
+	}
+	nick := r.Context().Value("nick").(string)
+	newWord := models.UserNewWord{
+		Nick:       nick,
+		WordID:     req.WordID,
+		IsMastered: false, // 默认未掌握
+	}
+	err := config.DB.Create(&newWord).Error
+	if err != nil {
+		if isDuplicateWordError(err) {
+			tool.JSONResponse(w, map[string]string{"msg": "生词已存在"}, http.StatusBadRequest)
+			return
+		}
+		tool.JSONResponse(w, nil, http.StatusInternalServerError)
+		return
+	}
+	tool.JSONResponse(w, newWord, http.StatusCreated)
+}
+func DeleteNewWord(w http.ResponseWriter, r *http.Request) {
+	nick := r.Context().Value("nick").(string)
+	wordIdStr := chi.URLParam(r, "wordId")
+	wordId, err := strconv.Atoi(wordIdStr)
+	if err != nil {
+		tool.JSONResponse(w, nil, http.StatusBadRequest)
+		return
+	}
+	err = config.DB.Where(&models.UserNewWord{Nick: nick, WordID: uint(wordId)}).Delete(&models.UserNewWord{}).Error
+	if err != nil {
+		tool.JSONResponse(w, nil, http.StatusInternalServerError)
+		return
+	}
+	tool.JSONResponse(w, map[string]string{"msg": "删除成功"}, http.StatusOK)
 }
