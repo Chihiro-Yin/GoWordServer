@@ -2,6 +2,8 @@ package routers
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
 	"imxy.top/wordserver/internal/handler"
@@ -10,8 +12,20 @@ import (
 
 func InitAllRouters() {
 	r := chi.NewRouter()
+	workDir, _ := os.Getwd()
+	staticDir := filepath.Join(workDir, "static")
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
+
+	// 4. 配置 HTML 路由
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		// 设置响应头：HTML 格式 + 中文编码
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// 读取并返回 HTML 文件
+		htmlPath := filepath.Join(workDir, "templates", "index.html")
+		http.ServeFile(w, r, htmlPath)
+	})
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.CORS)
+		// r.Use(middleware.CORS)
 		r.Route("/words", func(r chi.Router) {
 			r.Get("/", handler.ListWords)       // 查询单词列表
 			r.Get("/{wordId}", handler.GetWord) // 查询单个单词
@@ -36,5 +50,5 @@ func InitAllRouters() {
 			})
 		})
 	})
-	http.ListenAndServe(":3000", r)
+	http.ListenAndServe(":1145", r)
 }
