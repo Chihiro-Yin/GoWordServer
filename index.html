@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="柚子皮/">
+    <meta name="description" content="单词学习应用 - 支持生词保存、搜索、跟读等功能">
+    <meta name="keywords" content="单词学习, 英语学习, 生词本, 跟读">
+    <title>单词学习应用</title>
+    <script src="js/axios.min.js"></script>
+    <link rel="stylesheet" href="css/main.css">
+</head>
+
+<body>
+    <!-- 登录/注册模块 -->
+    <div id="auth">
+        <div id="login">
+            <h2>登录</h2>
+            <input type="text" id="loginNick" placeholder="昵称">
+            <input type="password" id="loginPassword" placeholder="密码">
+            <button onclick="login()">登录</button>
+            <button onclick="showRegister()">注册</button>
+            <button onclick="hideAuth()">取消</button>
+        </div>
+        <div id="register">
+            <h2>注册</h2>
+            <input type="text" id="regNick" placeholder="昵称">
+            <input type="email" id="regEmail" placeholder="邮箱">
+            <input type="password" id="regPassword" placeholder="密码">
+            <button onclick="register()">注册</button>
+            <button onclick="showLogin()">返回登录</button>
+            <button onclick="hideAuth()">取消</button>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div id="main">
+        <div class="container">
+            <div class="user-info-bar not_display_on_print">
+                <div onclick="LoginOrLogout()" id="userInfo">
+                    未登录
+                </div>
+            </div>
+
+            <!-- 搜索区域 -->
+            <div class="search-section not_display_on_print">
+                <input type="text" id="searchInput" placeholder="搜索单词..." class="search-input">
+                <button onclick="performSearch()" class="search-btn">搜索</button>
+                <button onclick="clearSearch()" class="clear-btn">清除</button>
+            </div>
+
+            <!-- 加载指示器 -->
+            <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+                <div class="spinner"></div>
+                <span>加载中...</span>
+            </div>
+            <div id="sourceHtml">
+                <!-- 单词卡片动态渲染 -->
+            </div>
+
+            <!-- 控制器 -->
+            <div class="controller not_display_on_print">
+                <div class="control-group">
+                    <button class="btn up" onclick="up()">上一页</button>
+                    <input type="number" min="1" class="input" id="pageInput" onchange="changePage(event)" value="1"
+                        placeholder="页码">
+                    <button class="btn down" onclick="down()">下一页</button>
+                    <span class="setting-label">每个单词读：</span>
+                    <input type="number" id="repeatCount" class="input" min="1" value="1" placeholder="次数">
+                    <span class="setting-label">次</span>
+                    <span class="setting-label">间隔：</span>
+                    <input type="number" id="intervalTime" class="input" min="0.5" step="0.5" value="1" placeholder="秒">
+                    <button class="btn start" onclick="startFollowRead()">开始跟读</button>
+                    <button class="btn pause" onclick="pauseFollowRead()" disabled>暂停</button>
+                    <button class="btn savedWord" onclick="showSavedWords()">查看生词</button>
+                </div>
+            </div>
+
+            <!-- 详情弹出框 -->
+            <div class="overlay" id="overlay"></div>
+            <div class="detail-popup" id="detailPopup">
+                <div class="popup-inner">
+                    <button class="popup-close" id="closePopup">&times;</button>
+                    <div class="popup-title">单词详情</div>
+                    <div class="popup-content" id="popupContent">
+                        <!-- 动态填充 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="print-page-indicator"></div>
+
+            <!-- 使用说明 -->
+            <!-- <div class="usage-guide">
+                <h3>使用说明</h3>
+                <ul>
+                    <li><strong>点击单词卡片：</strong>播放单词发音</li>
+                    <li><strong>右键点击（桌面端）或长按（移动端）：</strong>查看单词详情并保存到生词本</li>
+                    <li><strong>搜索功能：</strong>支持按单词或释义搜索（Ctrl+F 快速聚焦搜索框）</li>
+                    <li><strong>键盘快捷键：</strong>ESC 清除搜索，Enter 在搜索框中确认搜索</li>
+                    <li><strong>跟读功能：</strong>设置重复次数和间隔时间，点击开始跟读</li>
+                    <li><strong>分页导航：</strong>使用页面输入框或上一页/下一页按钮</li>
+                </ul>
+            </div> -->
+        </div>
+    </div>
+
+    <script>
+        axios.defaults.baseURL = 'http://127.0.0.1:3000/api/v1';
+        let token = localStorage.getItem('token');
+        let words = [];
+        let currentPage = 1;
+        const pageSize = 32;
+        let isShowingSaved = false;
+        let currentWord = null;
+        let userNewWords = new Set(); // 存储用户生词本中的单词ID
+        const audio = new Audio(); // 音频对象
+        let isFollowing = false; // 是否正在跟读
+        let word_data_now = []; // 当前页显示的单词数据
+
+        // 页面加载时加载单词
+        window.onload = function () {
+            loadWords(1);
+            initDetailPopupDelegate();
+            initKeyboardShortcuts();
+            updateUserInfo();
+            if (token) {
+                loadUserNewWordsSet(); // 加载用户生词本
+            }
+        };
+
+        if (token) {
+            axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+        }
+
+        function showRegister() {
+            document.getElementById('auth').style.display = 'block';
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('register').style.display = 'block';
+            document.getElementById('main').style.display = 'none';
+        }
+
+        function showLogin() {
+            document.getElementById('auth').style.display = 'block';
+            document.getElementById('login').style.display = 'block';
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('register').style.display = 'none';
+        }
+
+        function hideAuth() {
+            document.getElementById('auth').style.display = 'none';
+            document.getElementById('register').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+        }
+
+        async function login() {
+            const nick = document.getElementById('loginNick').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const res = await axios.post('/user/login', {
+                    nick, password
+                });
+                token = res.data.data.token;
+                localStorage.setItem('token', token);
+                axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+                await loadUserNewWordsSet(); // 加载用户生词本
+                hideAuth();
+                // document.getElementById('userInfo').style.backgroundColor = 'white';
+            } catch (err) {
+                alert('登录失败: ' + (err.response?.data?.msg || '未知错误'));
+            }
+        }
+
+        async function register() {
+            const nick = document.getElementById('regNick').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+
+            try {
+                const res = await axios.post('/user/register', {
+                    nick, email, password
+                });
+                token = res.data.data.token;
+                localStorage.setItem('token', token);
+                axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+                updateUserInfo();
+                alert('注册成功');
+                hideAuth();
+            } catch (err) {
+                alert('注册失败: ' + (err.response?.data?.data?.msg || '未知错误'));
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            delete axios.defaults.headers.common['Authorization'];
+            token = null;
+            userNewWords.clear();
+            const btn = document.querySelector('button[onclick="logout()"]');
+            if (btn) btn.remove();
+            updateUserInfo();
+            updateStats();
+        }
+
+        async function loadUserNewWordsSet() {
+            try {
+                const res = await axios.get('/new-word', {
+                    params: {
+                        page: 1,
+                        page_size: 1000 // 加载所有生词
+                    }
+                });
+                userNewWords.clear();
+                if (!res.data.data.list || res.data.data.list.length === 0) return;
+                res.data.data.list.forEach(item => {
+                    userNewWords.add(item.word_id);
+                });
+                updateUserInfo();
+                updateStats();
+            } catch (err) {
+                console.error('加载用户生词本失败:', err);
+            }
+        }
+
+        async function loadWords(page = 1) {
+            try {
+                showLoading();
+                const res = await axios.get('/words', {
+                    params: {
+                        page, page_size: pageSize
+                    }
+                });
+                words = res.data.data.list;
+                currentPage = page;
+                document.getElementById('pageInput').value = currentPage;
+                drawWords();
+                updateStats();
+            } catch (err) {
+                alert('加载单词失败: ' + (err.message || '网络错误'));
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function drawWords() {
+            const container = document.getElementById('sourceHtml');
+            container.innerHTML = '';
+            word_data_now = [];
+
+            words.forEach((word, index) => {
+                word_data_now.push(word);
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.setAttribute('data-word-id', word.id);
+                card.setAttribute('data-index', index);
+                card.innerHTML = `
+                    <img class="img" src="src/${word.img}" alt="${word.word}">
+                    <div class="word">${word.word}</div>
+                    <div class="phonetic">${word.accent || ''}</div>
+                    <div class="mean">${word.mean}</div>
+                    <div class="sound">${word.sound || ''}</div>
+                `;
+                container.appendChild(card);
+            });
+            updatePrintPageNumber();
+        }
+        function LoginOrLogout() {
+            if (!token) {
+                showLogin();
+            } else {
+                logout();
+            }
+        }
+        async function showSavedWords() {
+            if (!token && !isShowingSaved) {
+                LoginOrLogout();
+                return;
+            }
+
+            if (!isShowingSaved) {
+                await loadUserNewWords(1);
+                document.querySelector('.savedWord').innerHTML = '查看全部';
+                isShowingSaved = true;
+            } else {
+                loadWords(currentPage);
+                document.querySelector('.savedWord').innerHTML = '查看生词';
+                isShowingSaved = false;
+            }
+        }
+
+        async function loadUserNewWords(page = 1) {
+            try {
+                showLoading();
+                const res = await axios.get('/new-word', {
+                    params: {
+                        page, page_size: pageSize
+                    }
+                });
+
+                if (!res.data.data.list || res.data.data.list.length === 0) {
+                    alert('没有更多生词了');
+                    return;
+                }
+                const userWords = res.data.data.list;
+
+                words = userWords.map(uw => ({
+                    id: uw.word_id,
+                    word: uw.word,
+                    accent: uw.accent,
+                    mean: uw.mean,
+                    img: uw.img,
+                    sound: uw.sound
+                }));
+                currentPage = page;
+                document.getElementById('pageInput').value = currentPage;
+                drawWords();
+                updateStats();
+            } catch (err) {
+                alert('加载生词失败: ' + (err.message || '网络错误'));
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function markAsMastered(wordId) {
+            try {
+                await axios.put(`/new-word/${wordId}/master`);
+                alert('标记成功');
+                loadUserNewWords(currentPage);
+            } catch (err) {
+                alert('标记失败: ' + (err.message || '网络错误'));
+            }
+        }
+
+        async function markAsUnmastered(wordId) {
+            try {
+                await axios.put(`/new-word/${wordId}/unmaster`);
+                alert('标记成功');
+                loadUserNewWords(currentPage);
+            } catch (err) {
+                alert('标记失败: ' + (err.message || '网络错误'));
+            }
+        }
+
+        async function deleteNewWord(wordId) {
+            if (!confirm('确定要删除这个生词吗？')) return;
+
+            try {
+                await axios.delete(`/new-word/${wordId}`);
+                alert('删除成功');
+                loadUserNewWords(currentPage);
+            } catch (err) {
+                alert('删除失败: ' + (err.message || '网络错误'));
+            }
+        }
+
+        function up() {
+            if (currentPage > 1) {
+                currentPage--;
+                if (isShowingSaved) {
+                    loadUserNewWords(currentPage);
+                } else {
+                    loadWords(currentPage);
+                }
+            }
+        }
+
+        function down() {
+            currentPage++;
+            if (isShowingSaved) {
+                loadUserNewWords(currentPage);
+            } else {
+                loadWords(currentPage);
+            }
+        }
+
+        function changePage(event) {
+            const page = parseInt(event.target.value);
+            if (page > 0) {
+                currentPage = page;
+                if (isShowingSaved) {
+                    loadUserNewWords(currentPage);
+                } else {
+                    loadWords(currentPage);
+                }
+            }
+        }
+
+        function checkWordSaved(wordId) {
+            return userNewWords.has(wordId);
+        }
+
+        function getCardCurrentPageIndex(card) {
+            const index = parseInt(card.dataset.index);
+            return isNaN(index) || index < 0 || index >= words.length ? -1 : index;
+        }
+
+        function getCurrentPageCardData(index) {
+            return index === -1 ? null : words[index];
+        }
+
+        // 更新打印页码
+        function updatePrintPageNumber() {
+            document.querySelector('.print-page-indicator').textContent = currentPage;
+        }
+        // -------------------------- 跟读/点读逻辑 --------------------------
+        function startFollowRead() {
+            const cards = document.querySelectorAll('.card');
+            if (cards.length === 0) {
+                alert('没有可跟读的单词');
+                return;
+            }
+
+            const repeatCount = Math.max(1, parseInt(document.getElementById('repeatCount').value) || 1);
+            const intervalTime = Math.max(0.5, parseFloat(document.getElementById('intervalTime').value) || 1);
+
+            isFollowing = true;
+            currentCardIndex = 0;
+            currentRepeat = 0;
+            document.querySelector('.start').disabled = true;
+            document.querySelector('.pause').disabled = false;
+
+            followNext(cards, repeatCount, intervalTime);
+        }
+
+        function pauseFollowRead() {
+            if (!isFollowing) return;
+
+            isFollowing = false;
+            clearTimeout(followTimer);
+            audio.pause();
+            document.querySelectorAll('.card.highlight').forEach(card => card.classList.remove('highlight'));
+            document.querySelector('.start').disabled = false;
+            document.querySelector('.pause').disabled = true;
+        }
+
+        async function followNext(cards, repeatCount, intervalTime) {
+            if (!isFollowing) return;
+
+            const currentCard = cards[currentCardIndex];
+            if (!currentCard) {
+                pauseFollowRead();
+                return;
+            }
+
+            currentCard.classList.add('highlight');
+            const audioName = currentCard.querySelector('.sound').textContent;
+
+            if (audioName) {
+                audio.src = `src/${audioName}`;
+                try {
+                    await audio.play();
+                    await new Promise(resolve => audio.onended = resolve);
+                } catch (err) {
+                    console.error('音频播放失败:', err);
+                }
+            }
+
+            currentCard.classList.remove('highlight');
+            currentRepeat++;
+
+            if (currentRepeat < repeatCount) {
+                followTimer = setTimeout(() => followNext(cards, repeatCount, intervalTime), intervalTime * 1000);
+            } else {
+                currentCardIndex++;
+                currentRepeat = 0;
+                followTimer = setTimeout(() => followNext(cards, repeatCount, intervalTime), intervalTime * 1000);
+            }
+        }
+
+        // 点读功能（事件委托）
+        document.getElementById("sourceHtml").addEventListener('click', (event) => {
+            const card = event.target.closest('.card');
+            if (!card || isFollowing || event.target.tagName === 'BUTTON') return; // 排除按钮点击
+
+            const audioName = card.querySelector('.sound').textContent;
+            if (audioName) {
+                audio.src = `src/${audioName}`;
+                audio.play().catch(err => console.error('点读失败:', err));
+            }
+        });
+
+        // -------------------------- 弹出框逻辑 --------------------------
+        function initDetailPopupDelegate() {
+            const cardContainer = document.getElementById('sourceHtml');
+            const popup = document.getElementById('detailPopup');
+            const overlay = document.getElementById('overlay');
+            const closePopup = document.getElementById('closePopup');
+            const popupContent = document.getElementById('popupContent');
+
+            if (!cardContainer || !popup || !overlay || !closePopup || !popupContent) return;
+
+            // 右键事件（桌面端）
+            cardContainer.addEventListener('contextmenu', async (e) => {
+                const card = e.target.closest('.card');
+                if (!card) return;
+                e.preventDefault(); // 阻止默认右键菜单
+
+                const index = getCardCurrentPageIndex(card);
+                const cardData = getCurrentPageCardData(index);
+                if (!cardData?.id) return; // 校验id存在
+
+                // 等待异步获取单词详情
+                const cardDataDetail = await getWordDetailById(cardData.id);
+                if (cardDataDetail) {
+                    showDetailPopup(cardDataDetail);
+                }
+            });
+
+            // 长按事件（移动端）
+            let longPressTimer = null;
+            cardContainer.addEventListener('touchstart', async (e) => {
+                const card = e.target.closest('.card');
+                if (!card || e.touches.length > 1) return;
+
+                clearTimeout(longPressTimer);
+                longPressTimer = setTimeout(async () => {
+                    const index = getCardCurrentPageIndex(card);
+                    const cardData = getCurrentPageCardData(index);
+                    if (!cardData?.id) return;
+
+                    // 等待异步获取单词详情
+                    const cardDataDetail = await getWordDetailById(cardData.id);
+                    if (cardDataDetail) {
+                        showDetailPopup(cardDataDetail);
+                    }
+                }, 500);
+            });
+
+            ['touchend', 'touchmove', 'touchcancel'].forEach(type => {
+                cardContainer.addEventListener(type, () => clearTimeout(longPressTimer));
+            });
+
+            // 关闭弹出框
+            closePopup.addEventListener('click', hideDetailPopup);
+            overlay.addEventListener('click', hideDetailPopup);
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && popup.style.display === 'flex') hideDetailPopup();
+            });
+        }
+
+        async function getWordDetailById(wordId) {
+            try {
+                const res = await axios.get(`/words/${wordId}`);
+                return res.data.data;
+            } catch (err) {
+                alert('加载单词失败: ' + (err.message || '网络错误'));
+            }
+        }
+        function getCardCurrentPageIndex(card) {
+            const index = parseInt(card.dataset.index);
+            return isNaN(index) || index < 0 || index >= words.length ? -1 : index;
+        }
+
+        function showDetailPopup(cardData) {
+            const popup = document.getElementById('detailPopup');
+            const overlay = document.getElementById('overlay');
+            const popupContent = document.getElementById('popupContent');
+            if (!popup || !overlay || !popupContent) return;
+
+            const isSaved = checkWordSaved(cardData.id);
+            const saveBtnText = isSaved ? '取消生词' : '保存生词';
+            // 拼接图片部分（主图 + 变形图）
+            const mainImg = cardData.img
+                ? `<div class="popup-img-container"><img src="src/${cardData.img}" alt="${cardData.word || cardData.Word}" class="popup-main-img"></div>`
+                : '';
+            const deformationImg = cardData.deformation_img
+                ? `<div class="popup-img-container"><img src="src/${cardData.deformation_img}" alt="${cardData.word || cardData.Word}-变形图" class="popup-deformation-img"></div>`
+                : '';
+
+            // 构建表格行（仅保留非空字段）
+            let tableRows = '';
+            // 释义
+            if (cardData.mean || cardData.MeanCn) {
+                tableRows += `
+    <tr>
+        <th>释义</th>
+        <td>${cardData.mean || cardData.MeanCn}</td>
+    </tr>`;
+            }
+            // 例句
+            if (cardData.sentence || cardData.sentences) {
+                tableRows += `
+    <tr>
+        <th>例句</th>
+        <td>${cardData.sentence || cardData.sentences}</td>
+    </tr>`;
+            }
+            // 例句翻译
+            if (cardData.sentence_trans) {
+                tableRows += `
+    <tr>
+        <th>例句翻译</th>
+        <td>${cardData.sentence_trans}</td>
+    </tr>`;
+            }
+            // 词源
+            if (cardData.word_etyma || cardData.WordEtymas) {
+                tableRows += `
+    <tr>
+        <th>词源</th>
+        <td>${cardData.word_etyma || cardData.WordEtymas}</td>
+    </tr>`;
+            }
+
+            // 拼接完整弹窗内容
+            popupContent.innerHTML = `
+    ${(mainImg || deformationImg) ? `<div class="popup-img-group">${mainImg}${deformationImg}</div>` : ''}
+    <div class="popup-title-group">
+        <h1 class="popup-word-title">${cardData.word || cardData.Word}</h1>
+        ${cardData.accent ? `<p class="popup-accent-subtitle">${cardData.accent}</p>` : ''}
+    </div>
+    ${tableRows ? `
+    <table class="word-detail-table">
+        <tbody>${tableRows}</tbody>
+    </table>
+    ` : ''}
+    <div class="popup-save-area">
+        <button class="btn" id="save" data-word="${cardData.word || cardData.Word || ''}">${saveBtnText}</button>
+        <div class="save-tip"></div>
+    </div>
+`;
+            // 绑定保存按钮事件
+            const saveBtn = popupContent.querySelector('#save');
+            const saveTip = popupContent.querySelector('.save-tip');
+            saveBtn.addEventListener('click', () => handleSaveWord(cardData, saveBtn, saveTip));
+
+            popup.style.display = 'flex';
+            overlay.style.display = 'block';
+        }
+
+        function hideDetailPopup() {
+            document.getElementById('detailPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        async function handleSaveWord(cardData, saveBtn, saveTip) {
+            if (!token) {
+                alert('请先登录');
+                return;
+            }
+
+            const isCurrentlySaved = checkWordSaved(cardData.id);
+
+            try {
+                if (isCurrentlySaved) {
+                    // 取消生词
+                    await axios.delete(`/new-word/${cardData.id}`);
+                    userNewWords.delete(cardData.id);
+                    saveBtn.textContent = '保存生词';
+                    saveTip.textContent = '已取消生词';
+                    saveTip.style.color = '#67c23a';
+                    updateStats();
+                } else {
+                    // 保存生词
+                    await axios.post('/new-word', { word_id: cardData.id });
+                    userNewWords.add(cardData.id);
+                    saveBtn.textContent = '取消生词';
+                    saveTip.textContent = '保存成功';
+                    saveTip.style.color = '#67c23a';
+                    updateStats();
+                }
+
+                // 显示提示
+                saveTip.style.top = '20px';
+                setTimeout(() => {
+                    saveTip.style.top = '-50px';
+                    saveTip.textContent = '';
+                }, 2000);
+            } catch (err) {
+                saveTip.textContent = isCurrentlySaved ? '取消失败' : '保存失败';
+                saveTip.style.color = '#f56c6c';
+                saveTip.style.top = '20px';
+                setTimeout(() => {
+                    saveTip.style.top = '-50px';
+                    saveTip.textContent = '';
+                }, 2000);
+            }
+        }
+
+        // 搜索功能
+        function performSearch() {
+            const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+            if (!searchTerm) {
+                clearSearch();
+                return;
+            }
+
+            const filteredWords = words.filter(word =>
+                word.word.toLowerCase().includes(searchTerm) ||
+                word.mean.toLowerCase().includes(searchTerm)
+            );
+
+            displayWords(filteredWords);
+
+            // 显示搜索结果统计
+            const resultCount = filteredWords.length;
+            const originalCount = words.length;
+            if (resultCount !== originalCount) {
+                showSearchResult(`找到 ${resultCount} 个匹配结果`);
+            }
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            displayWords(words);
+            hideSearchResult();
+        }
+
+        function showSearchResult(message) {
+            let resultDiv = document.getElementById('searchResult');
+            if (!resultDiv) {
+                resultDiv = document.createElement('div');
+                resultDiv.id = 'searchResult';
+                resultDiv.className = 'search-result';
+                document.querySelector('.search-section').appendChild(resultDiv);
+            }
+            resultDiv.textContent = message;
+            resultDiv.style.display = 'block';
+        }
+
+        function hideSearchResult() {
+            const resultDiv = document.getElementById('searchResult');
+            if (resultDiv) {
+                resultDiv.style.display = 'none';
+            }
+        }
+
+        function displayWords(wordList) {
+            const container = document.getElementById('sourceHtml');
+            container.innerHTML = '';
+
+            wordList.forEach((word, index) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.setAttribute('data-word-id', word.id);
+                card.setAttribute('data-index', index);
+                card.innerHTML = `
+                    <img class="img" src="src/${word.img}" alt="${word.word}">
+                    <div class="word">${word.word}</div>
+                    <div class="phonetic">${word.accent || ''}</div>
+                    <div class="mean">${word.mean}</div>
+                    <div class="sound">${word.sound || ''}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 键盘快捷键
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', function (event) {
+                // 搜索快捷键 (Ctrl+F 或 Cmd+F)
+                if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+                    event.preventDefault();
+                    document.getElementById('searchInput').focus();
+                }
+
+                // ESC 清除搜索
+                if (event.key === 'Escape') {
+                    const searchInput = document.getElementById('searchInput');
+                    if (document.activeElement === searchInput && searchInput.value) {
+                        clearSearch();
+                    }
+                }
+
+                // Enter 在搜索框中触发搜索
+                if (event.key === 'Enter' && document.activeElement === document.getElementById('searchInput')) {
+                    performSearch();
+                }
+            });
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            const totalWords = words.length;
+            const savedWords = userNewWords.size;
+
+            const totalWordsElement = document.getElementById('totalWords');
+            const savedWordsElement = document.getElementById('savedWords');
+
+            if (totalWordsElement) {
+                totalWordsElement.textContent = totalWords;
+            }
+            if (savedWordsElement) {
+                savedWordsElement.textContent = savedWords;
+            }
+        }
+
+        // 更新用户信息显示
+        function updateUserInfo() {
+            const userInfoElement = document.getElementById('userInfo');
+            if (userInfoElement) {
+                if (token) {
+                    // 这里可以从token中解析用户名，或者从API获取用户信息
+                    // 暂时显示简单的登录状态
+                    userInfoElement.textContent = '退出登录';
+                } else {
+                    userInfoElement.textContent = '未登录';
+                }
+            }
+        }
+
+        // 显示/隐藏加载指示器
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+
+    </script>
+</body>
+
+</html>

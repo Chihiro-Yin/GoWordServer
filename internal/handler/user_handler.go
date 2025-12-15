@@ -21,7 +21,10 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		tool.JSONResponse(w, map[string]string{"error": err.Error()}, http.StatusBadRequest)
 		return
 	}
-
+	if req.Nick == "" || req.Password == "" {
+		tool.JSONResponse(w, map[string]string{"msg": "昵称和密码不能为空"}, http.StatusBadRequest)
+		return
+	}
 	// 2. 密码加密（bcrypt）
 	hashPwd, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {

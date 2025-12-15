@@ -22,7 +22,7 @@ type UserNewWordVO struct {
 	IsMastered bool      `json:"is_mastered"`
 	Img        string    `json:"img"`
 	Word       string    `json:"word"`
-	Phonetic   string    `json:"phonetic"`
+	Accent     string    `json:"accent"`
 	Mean       string    `json:"mean"`
 	Sound      string    `json:"sound"`
 	CreatedAt  time.Time `json:"created_at"`

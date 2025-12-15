@@ -38,7 +38,7 @@ func GetWord(w http.ResponseWriter, r *http.Request) {
 		tool.JSONResponse(w, nil, http.StatusBadRequest)
 		return
 	}
-	var word models.Word
+	var word models.WordDetail
 	err = config.DB.First(&word, wordId).Error
 	if err != nil {
 		tool.JSONResponse(w, nil, http.StatusNotFound)

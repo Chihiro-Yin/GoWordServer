@@ -11,6 +11,7 @@ import (
 func InitAllRouters() {
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(middleware.CORS)
 		r.Route("/words", func(r chi.Router) {
 			r.Get("/", handler.ListWords)       // 查询单词列表
 			r.Get("/{wordId}", handler.GetWord) // 查询单个单词

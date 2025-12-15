@@ -58,8 +58,8 @@ func ListNewWords(w http.ResponseWriter, r *http.Request) {
 			IsMastered: uw.IsMastered, // 掌握状态
 			Img:        word.Img,      // 单词图片
 			Word:       word.Word,     // 单词本身
-			Phonetic:   word.Phonetic, // 音标
-			Mean:       word.Mean,     // 释义
+			Accent:     word.Accent,   // 音标
+			Mean:       word.MeanCn,   // 释义
 			Sound:      word.Sound,    // 发音文件
 			CreatedAt:  uw.CreatedAt,  // 生词添加时间
 		})
