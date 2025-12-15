@@ -167,6 +167,7 @@
                 axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
                 await loadUserNewWordsSet(); // 加载用户生词本
                 hideAuth();
+                updateUserInfo();
                 // document.getElementById('userInfo').style.backgroundColor = 'white';
             } catch (err) {
                 alert('登录失败: ' + (err.response?.data?.msg || '未知错误'));
