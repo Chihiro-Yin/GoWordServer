@@ -2,6 +2,11 @@
 
 这是一个基于Go语言开发的单词学习服务器应用，提供用户管理、单词数据管理、云端生词本、打印导出和学习功能的后端API服务。
 
+打印效果：
+
+<img width="4096" height="3072" alt="IMG_20260419_224902337" src="https://github.com/user-attachments/assets/e5687fa1-55f1-4e5a-b890-2d8fe9286028" />
+
+
 ## 功能特性
 
 - 用户注册和登录
